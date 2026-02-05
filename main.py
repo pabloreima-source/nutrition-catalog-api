@@ -35,3 +35,41 @@ def verify_from_off(q: str = Query(...), lang: str = "es"):
             }
 
     return {"error": "not found"}
+from fastapi import Body
+
+@app.post("/catalog/batch_verify")
+def batch_verify(foods: list[str] = Body(...)):
+    results = {}
+
+    for q in foods:
+        url = "https://world.openfoodfacts.org/cgi/search.pl"
+        params = {
+            "search_terms": q,
+            "search_simple": 1,
+            "action": "process",
+            "json": 1,
+            "page_size": 5,
+            "fields": "product_name,nutriments,lang"
+        }
+
+        r = requests.get(url, params=params, timeout=15)
+        data = r.json()
+
+        found = False
+        for p in data.get("products", []):
+            if p.get("lang") == "es":
+                n = p.get("nutriments", {})
+                results[q] = {
+                    "name": p.get("product_name"),
+                    "kcal_100g": n.get("energy-kcal_100g"),
+                    "protein_100g": n.get("proteins_100g"),
+                    "carbs_100g": n.get("carbohydrates_100g"),
+                    "fat_100g": n.get("fat_100g"),
+                }
+                found = True
+                break
+
+        if not found:
+            results[q] = {"error": "not found"}
+
+    return results
